@@ -18,6 +18,8 @@ config.yaml
 # data artifacts
 data/
 !data/.gitkeep
+!src/ashare_quant_factory/data/
+!src/ashare_quant_factory/data/*.py
 
 # OS/editor
 .DS_Store
