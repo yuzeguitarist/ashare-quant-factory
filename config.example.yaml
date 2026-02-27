@@ -1,0 +1,80 @@
+# =========================
+# AShare Quant Factory (AQF)
+# =========================
+# 提示：
+# 1) 服务器在美国也没关系：本项目所有调度都以 Asia/Shanghai（北京时间）为准
+# 2) watchlist 使用 Baostock 标准代码：sh.600000 / sz.000001
+
+project:
+  name: "AShare Quant Factory"
+  timezone: "Asia/Shanghai"
+
+paths:
+  # SQLite 数据库文件路径（建议放在仓库 data/ 目录）
+  db: "data/aqf.sqlite3"
+  # 报告输出目录（每天会生成一份 HTML，同时会把图表落盘）
+  reports_dir: "data/reports"
+  # 运行锁文件（防止重复启动）
+  lock_file: "data/aqf.lock"
+
+data:
+  # 首次全量拉取的历史起始日期（YYYY-MM-DD）
+  history_start: "2016-01-01"
+  # 用于“数据是否更新”的探测股票（建议指数或流动性极高股票）
+  probe_symbol: "sh.000001"
+
+schedule:
+  # 每天北京时间 20:00 之后开始轮询
+  poll_start_time: "20:00"
+  # 每隔 5 分钟检查一次（单位：秒）
+  poll_interval_seconds: 300
+  # 下一个交易日开盘时间（A股默认 09:30）
+  market_open_time: "09:30"
+  # 开盘前多少分钟停止 GA（默认 30 分钟 -> 09:00 停止）
+  stop_minutes_before_open: 30
+
+# 你的自选股列表（建议 10~80 只更丝滑；更多也可跑但 GA 评估会更重）
+watchlist:
+  - "sh.600519"   # 贵州茅台
+  - "sh.601318"   # 中国平安
+  - "sz.000858"   # 五粮液
+  - "sz.000333"   # 美的集团
+  - "sh.600036"   # 招商银行
+
+backtest:
+  # 交易成本：单位 bps（万分之一）
+  commission_bps: 3        # 双边佣金，默认 0.03%
+  stamp_duty_bps: 10       # 卖出印花税，默认 0.10%
+  slippage_bps: 2          # 滑点估计，默认 0.02%
+
+ga:
+  # 种群大小（越大越强但越耗 CPU）
+  population_size: 64
+  # 精英保留数量
+  elite_size: 8
+  # 交叉/变异概率
+  crossover_rate: 0.65
+  mutation_rate: 0.25
+  # 并行评估 worker 数（4核机器建议 3，留 1 核给系统/IO）
+  workers: 3
+  # 每个交易日 GA 最大评估股票条数（防止 watchlist 过大导致夜间跑不完）
+  # 0 表示不限制
+  max_eval_symbols: 0
+  # 固定随机种子：便于复现实验（可改为 null 让每天不同）
+  seed: 42
+
+risk:
+  # 单只股票最大建议仓位
+  max_weight_per_symbol: 0.20
+  # 建议输出的图表数量（过多会让邮件很大）
+  top_charts: 6
+
+email:
+  # 发件人与 SMTP 信息（Gmail 推荐使用 App Password）
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587
+  sender_name: "AQF Nightly Alpha"
+  # 目标邮箱（也可在 .env 里用 AQF_EMAIL_TO 覆盖）
+  to:
+    - "target@example.com"
+  subject_prefix: "[AQF] "

@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title }}</title>
+  <style>
+    body{
+      font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+      background:#0b1020;
+      color:#e8ecff;
+      margin:0; padding:0;
+    }
+    .container{
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 28px 18px 60px;
+    }
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03));
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 16px;
+      padding: 18px 18px;
+      margin: 14px 0;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+    }
+    .title{
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      margin: 0 0 6px;
+    }
+    .sub{
+      opacity: 0.85;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .kpi{
+      display:flex;
+      flex-wrap:wrap;
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .kpi .item{
+      flex: 1 1 160px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 12px 12px;
+    }
+    .kpi .label{
+      font-size: 12px;
+      opacity: 0.8;
+      margin-bottom: 6px;
+    }
+    .kpi .value{
+      font-size: 20px;
+      font-weight: 800;
+    }
+    .badge{
+      display:inline-block;
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 12px;
+      letter-spacing: 0.5px;
+    }
+    .buy{ background: rgba(46, 204, 113, 0.18); color: #2ecc71; border: 1px solid rgba(46,204,113,0.35); }
+    .sell{ background: rgba(231, 76, 60, 0.18); color: #ff6b6b; border: 1px solid rgba(231,76,60,0.35); }
+    .hold{ background: rgba(149,165,166,0.18); color: #cfd6d6; border: 1px solid rgba(149,165,166,0.35); }
+
+    table{
+      width:100%;
+      border-collapse: collapse;
+      overflow:hidden;
+      border-radius: 12px;
+      margin-top: 8px;
+    }
+    th, td{
+      padding: 12px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      font-size: 14px;
+      vertical-align: middle;
+    }
+    th{
+      text-align:left;
+      font-size: 12px;
+      letter-spacing: 0.4px;
+      opacity: 0.85;
+    }
+    tr:hover td{
+      background: rgba(255,255,255,0.03);
+    }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .muted{ opacity: 0.8; font-size: 12px; line-height: 1.5; }
+    .hr{ height:1px; background: rgba(255,255,255,0.10); margin: 12px 0; }
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 720px){
+      .grid{ grid-template-columns: 1fr; }
+    }
+    img{
+      max-width:100%;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.10);
+    }
+    .footer{
+      margin-top: 18px;
+      opacity: 0.75;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .warn{
+      color: #ffdd57;
+      background: rgba(255,221,87,0.12);
+      border: 1px solid rgba(255,221,87,0.25);
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <div class="card">
+      <div class="title">{{ title }}</div>
+      <div class="sub">
+        交易日数据：<b>{{ trade_date }}</b> ｜ 次日：<b>{{ next_trade_date }}</b><br/>
+        生成时间：{{ generated_at }}（Asia/Shanghai）
+      </div>
+
+      <div class="kpi">
+        <div class="item">
+          <div class="label">策略适配股票数</div>
+          <div class="value">{{ ga_metrics.valid_symbols }}</div>
+        </div>
+        <div class="item">
+          <div class="label">均值 Sharpe</div>
+          <div class="value">{{ "%.2f"|format(ga_metrics.mean_sharpe) }}</div>
+        </div>
+        <div class="item">
+          <div class="label">均值年化收益</div>
+          <div class="value">{{ "%.1f%%"|format(ga_metrics.mean_annual_return*100) }}</div>
+        </div>
+        <div class="item">
+          <div class="label">均值最大回撤</div>
+          <div class="value">{{ "%.1f%%"|format(ga_metrics.mean_max_drawdown*100) }}</div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="grid">
+        <div>
+          <div style="font-weight:800; font-size:16px; margin-bottom:8px;">风险仪表盘（组合视角）</div>
+          <img alt="risk gauge" src="cid:{{ gauge_cid }}" />
+          <div class="muted">风险评分 0-100，数值越高风险越大。用于辅助仓位管理。</div>
+        </div>
+        <div>
+          <div style="font-weight:800; font-size:16px; margin-bottom:8px;">最优策略参数（GA）</div>
+          <table>
+            <tr><th>参数</th><th>值</th><th>说明</th></tr>
+            <tr><td>fast_ma</td><td class="mono">{{ strategy.fast_ma }}</td><td class="muted">短期均线窗口</td></tr>
+            <tr><td>slow_ma</td><td class="mono">{{ strategy.slow_ma }}</td><td class="muted">长期均线窗口</td></tr>
+            <tr><td>rsi_period</td><td class="mono">{{ strategy.rsi_period }}</td><td class="muted">RSI 周期</td></tr>
+            <tr><td>rsi_buy</td><td class="mono">{{ strategy.rsi_buy }}</td><td class="muted">RSI 买入阈值（越低越逆势）</td></tr>
+            <tr><td>rsi_sell</td><td class="mono">{{ strategy.rsi_sell }}</td><td class="muted">RSI 卖出阈值</td></tr>
+            <tr><td>atr_period</td><td class="mono">{{ strategy.atr_period }}</td><td class="muted">ATR 周期（用于止损止盈）</td></tr>
+            <tr><td>stop_loss_atr</td><td class="mono">{{ strategy.stop_loss_atr }}</td><td class="muted">止损 = ATR * 倍数</td></tr>
+            <tr><td>take_profit_atr</td><td class="mono">{{ strategy.take_profit_atr }}</td><td class="muted">止盈 = ATR * 倍数</td></tr>
+          </table>
+          <div class="muted" style="margin-top:10px;">
+            <b>策略逻辑：</b>收盘计算信号，次日开盘执行（考虑 A 股 T+1）。
+            <br/>买入：fast_ma 上穿 slow_ma 且 RSI &lt; rsi_buy。
+            <br/>卖出：fast_ma 下穿 slow_ma 或 RSI &gt; rsi_sell；止损/止盈参考 ATR * 倍数（次日执行）。
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="card">
+      <div style="font-weight:900; font-size:18px; margin-bottom:10px;">今日最优交易建议（自选股）</div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>股票</th>
+            <th>动作</th>
+            <th>建议仓位</th>
+            <th>止损</th>
+            <th>止盈</th>
+            <th>预期收益</th>
+            <th>风险</th>
+            <th>备注</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for r in recommendations %}
+          <tr>
+            <td class="mono">{{ r.code }}</td>
+            <td>
+              {% if r.action == "BUY" %}
+                <span class="badge buy">BUY</span>
+              {% elif r.action == "SELL" %}
+                <span class="badge sell">SELL</span>
+              {% else %}
+                <span class="badge hold">HOLD</span>
+              {% endif %}
+            </td>
+            <td><b>{{ "%.1f%%"|format(r.weight*100) }}</b></td>
+            <td class="mono">{{ "%.2f"|format(r.stop_loss) if r.stop_loss is not none else "-" }}</td>
+            <td class="mono">{{ "%.2f"|format(r.take_profit) if r.take_profit is not none else "-" }}</td>
+            <td>{{ "%.2f%%"|format((r.expected_return or 0)*100) if r.expected_return is not none else "-" }}</td>
+            <td>{{ r.risk_score if r.risk_score is not none else "-" }}</td>
+            <td class="muted">{{ r.note }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="hr"></div>
+
+      <div class="warn">
+        <b>提醒：</b>本报告基于历史数据回测与简化撮合假设（T+1 已考虑，但涨跌停、停牌、流动性与真实交易滑点并未完全建模）。
+        任何“BUY/SELL/HOLD”仅供研究参考，不构成投资建议。
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:900; font-size:18px; margin-bottom:8px;">重点标的图表（K线 + 信号）</div>
+      <div class="muted">默认展示建议仓位排名前 {{ charts|length }} 的股票（可在 config.yaml 调整 top_charts）。</div>
+
+      {% for c in charts %}
+      <div style="margin-top:14px;">
+        <div style="font-weight:800; font-size:15px; margin: 0 0 8px;">
+          {{ c.code }} <span class="muted">｜ {{ c.caption }}</span>
+        </div>
+        <img alt="chart {{ c.code }}" src="cid:{{ c.cid }}" />
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="footer">
+      生成器：AShare Quant Factory (AQF) ｜ 开源协议：Apache-2.0<br/>
+      若你想把 SQLite 替换成 Postgres、加入分钟线、接入实盘券商，请查看 docs/ARCHITECTURE.md
+    </div>
+
+  </div>
+</body>
+</html>
