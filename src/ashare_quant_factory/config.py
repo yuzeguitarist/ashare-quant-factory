@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 import yaml
 from dotenv import load_dotenv
@@ -40,6 +41,12 @@ class Paths:
 
 
 @dataclass(frozen=True)
+class Database:
+    backend: str = "sqlite"
+    url: str = ""
+
+
+@dataclass(frozen=True)
 class Data:
     history_start: str = "2016-01-01"
     probe_symbol: str = "sh.000001"
@@ -69,6 +76,9 @@ class GA:
     workers: int = 3
     max_eval_symbols: int = 0
     seed: int | None = 42
+    cv_method: str = "walk_forward"
+    cv_splits: int = 3
+    cv_purge_days: int = 2
 
 
 @dataclass(frozen=True)
@@ -91,6 +101,7 @@ class Settings:
     project: Project
     paths: Paths
     data: Data
+    database: Database
     schedule: Schedule
     watchlist: tuple[str, ...]
     backtest: Backtest
@@ -141,6 +152,7 @@ def load_settings(config_path: str | Path, env_path: str | Path | None = None) -
         "project": {"name": Project.name, "timezone": Project.timezone},
         "paths": {"db": Paths.db, "reports_dir": Paths.reports_dir, "lock_file": Paths.lock_file},
         "data": {"history_start": Data.history_start, "probe_symbol": Data.probe_symbol},
+        "database": {"backend": Database.backend, "url": Database.url},
         "schedule": {
             "poll_start_time": Schedule.poll_start_time,
             "poll_interval_seconds": Schedule.poll_interval_seconds,
@@ -161,6 +173,9 @@ def load_settings(config_path: str | Path, env_path: str | Path | None = None) -
             "workers": GA.workers,
             "max_eval_symbols": GA.max_eval_symbols,
             "seed": GA.seed,
+            "cv_method": GA.cv_method,
+            "cv_splits": GA.cv_splits,
+            "cv_purge_days": GA.cv_purge_days,
         },
         "risk": {"max_weight_per_symbol": Risk.max_weight_per_symbol, "top_charts": Risk.top_charts},
         "email": {
@@ -173,6 +188,14 @@ def load_settings(config_path: str | Path, env_path: str | Path | None = None) -
     }
 
     merged = _deep_update(defaults, raw)
+
+    # Env overrides
+    db_backend = os.getenv("AQF_DB_BACKEND")
+    db_url = os.getenv("AQF_DB_URL")
+    if db_backend:
+        merged["database"]["backend"] = db_backend
+    if db_url:
+        merged["database"]["url"] = db_url
 
     # Env overrides for email
     smtp_host = os.getenv("AQF_SMTP_HOST")
@@ -195,6 +218,7 @@ def load_settings(config_path: str | Path, env_path: str | Path | None = None) -
         project=Project(**merged["project"]),
         paths=Paths(**merged["paths"]),
         data=Data(**merged["data"]),
+        database=Database(**merged["database"]),
         schedule=Schedule(**merged["schedule"]),
         watchlist=watchlist,
         backtest=Backtest(**merged["backtest"]),

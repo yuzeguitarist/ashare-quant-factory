@@ -1,7 +1,7 @@
 # AShare Quant Factory (AQF) — A股夜间策略工厂
 
 > **面向 A 股的“全自动夜间策略进化 + 次日开盘前邮件投递”量化流水线**  
-> 数据源：**Baostock 官方接口**｜持久化：SQLite（可平滑迁移到 Postgres）｜策略搜索：遗传算法（GA）｜报告：基金经理风格 HTML 邮件
+> 数据源：**Baostock 官方接口**｜持久化：SQLite / Postgres（可选）｜策略搜索：遗传算法（GA）+ Walk-forward/Purged CV｜报告：基金经理风格 HTML 邮件 + 稳定性/敏感性
 
 <p align="center">
   <img alt="AQF" src="https://dummyimage.com/1200x360/111/fff.png&text=AShare+Quant+Factory+(AQF)+%E2%80%94+Nightly+Alpha+Pipeline" />

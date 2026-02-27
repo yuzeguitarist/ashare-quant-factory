@@ -160,6 +160,14 @@
           <div style="font-weight:800; font-size:16px; margin-bottom:8px;">风险仪表盘（组合视角）</div>
           <img alt="risk gauge" src="cid:{{ gauge_cid }}" />
           <div class="muted">风险评分 0-100，数值越高风险越大。用于辅助仓位管理。</div>
+          <div style="font-weight:800; font-size:16px; margin:14px 0 8px;">策略稳定性评分</div>
+          <img alt="stability badge" src="cid:{{ stability_cid }}" />
+          <div class="muted">当前评分：<b>{{ stability_score }}/100</b>（越高表示跨时间切片表现更稳健）。</div>
+          {% if sensitivity_cid %}
+          <div style="font-weight:800; font-size:16px; margin:14px 0 8px;">参数敏感性（局部）</div>
+          <img alt="parameter sensitivity" src="cid:{{ sensitivity_cid }}" />
+          <div class="muted">展示最优参数上下微调 1 档对 fitness 的影响（越平坦越稳健）。</div>
+          {% endif %}
         </div>
         <div>
           <div style="font-weight:800; font-size:16px; margin-bottom:8px;">最优策略参数（GA）</div>

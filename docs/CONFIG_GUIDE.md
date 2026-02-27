@@ -32,3 +32,19 @@ AQF 配置由两部分组成：
   - 降低 `risk.top_charts`（例如 4）
   - 缩短图表窗口（见 `report.charts` 模块常量）
 
+
+
+## Postgres（可选）
+
+- `config.yaml` 新增：
+  - `database.backend`: `sqlite` 或 `postgres`
+  - `database.url`: Postgres 连接串（仅 backend=postgres 时使用）
+- 也可用环境变量覆盖：
+  - `AQF_DB_BACKEND=postgres`
+  - `AQF_DB_URL=postgresql+psycopg://user:pass@host:5432/aqf`
+
+## 防过拟合设置（GA）
+
+- `ga.cv_method`: `none` / `walk_forward` / `purged_cv`
+- `ga.cv_splits`: 时间切片数量
+- `ga.cv_purge_days`: Purged CV 每折前后剔除天数

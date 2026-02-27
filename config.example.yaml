@@ -23,6 +23,12 @@ data:
   # 用于“数据是否更新”的探测股票（建议指数或流动性极高股票）
   probe_symbol: "sh.000001"
 
+database:
+  # sqlite / postgres（默认 sqlite）
+  backend: "sqlite"
+  # 当 backend=postgres 时生效，例如：postgresql+psycopg://user:pass@127.0.0.1:5432/aqf
+  url: ""
+
 schedule:
   # 每天北京时间 20:00 之后开始轮询
   poll_start_time: "20:00"
@@ -62,6 +68,10 @@ ga:
   max_eval_symbols: 0
   # 固定随机种子：便于复现实验（可改为 null 让每天不同）
   seed: 42
+  # 防过拟合评估：none / walk_forward / purged_cv
+  cv_method: "walk_forward"
+  cv_splits: 3
+  cv_purge_days: 2
 
 risk:
   # 单只股票最大建议仓位
