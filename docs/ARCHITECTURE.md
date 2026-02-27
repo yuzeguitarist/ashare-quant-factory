@@ -19,7 +19,7 @@ AQF 由一个常驻后台进程（systemd service）驱动，内部包含“夜�
 
 4. **遗传算法夜间进化**
    - 在 stop_time（下个交易日开盘前 30 分钟）之前不断迭代
-   - 评估函数：对 watchlist 的历史数据跑简化回测，输出复合 fitness（Sharpe/CAGR/DD/turnover）
+   - 评估函数：支持 `walk_forward` / `purged_cv` 防过拟合，输出复合 fitness（Sharpe/CAGR/DD/turnover）
    - 并行：默认 3 个 workers（4 核机器的甜点位）
 
 5. **建议生成**
@@ -29,6 +29,7 @@ AQF 由一个常驻后台进程（systemd service）驱动，内部包含“夜�
 6. **HTML 邮件报告**
    - Jinja2 模板渲染
    - mplfinance 生成 K 线与信号图，MIME inline（cid）嵌入邮件
+   - 附加“策略稳定性评分”与“参数敏感性”小图
    - 同时落盘到 `data/reports/YYYYMMDD_*.html` 便于审计
 
 ## 为什么 SQLite 足够

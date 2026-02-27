@@ -5,22 +5,55 @@ on:
   pull_request:
 
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
       - name: Install
         run: |
           python -m pip install -U pip
-          pip install -r requirements.txt
           pip install -e .
-          pip install pytest ruff
-      - name: Lint
+          pip install ruff
+      - name: Ruff
         run: |
           ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: aqf
+          POSTGRES_PASSWORD: aqf
+          POSTGRES_DB: aqf_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U aqf -d aqf_ci"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      AQF_DB_BACKEND: postgres
+      AQF_DB_URL: postgresql+psycopg://aqf:aqf@127.0.0.1:5432/aqf_ci
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install
+        run: |
+          python -m pip install -U pip
+          pip install -e .[postgres]
+          pip install -r requirements.txt
+          pip install pytest
       - name: Tests
         run: |
           pytest

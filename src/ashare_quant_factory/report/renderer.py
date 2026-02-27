@@ -9,7 +9,13 @@ import pandas as pd
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from ..timeutils import tz_now
-from .charts import ChartSpec, make_candlestick_with_signals, make_risk_gauge
+from .charts import (
+    ChartSpec,
+    make_candlestick_with_signals,
+    make_parameter_sensitivity_chart,
+    make_risk_gauge,
+    make_stability_badge,
+)
 
 
 @dataclass(frozen=True)
@@ -49,6 +55,8 @@ class ReportRenderer:
         recommendations: pd.DataFrame,
         dataset: dict[str, pd.DataFrame],
         signals_map: dict[str, pd.DataFrame] | None,
+        stability_score: int = 0,
+        parameter_sensitivity: list[dict[str, float | str]] | None = None,
         out_dir: Path,
         top_charts: int = 6,
         tz_name: str = "Asia/Shanghai",
@@ -76,6 +84,15 @@ class ReportRenderer:
         gauge_cid = _safe_cid(f"gauge_{trade_date}")
         gauge_png = make_risk_gauge(gauge_score, title="Portfolio Risk")
         images.append(InlineImage(cid=gauge_cid, content=gauge_png))
+
+        stability_cid = _safe_cid(f"stability_{trade_date}")
+        stability_png = make_stability_badge(int(stability_score), title="策略稳定性评分")
+        images.append(InlineImage(cid=stability_cid, content=stability_png))
+
+        sensitivity_cid = _safe_cid(f"sensitivity_{trade_date}")
+        sensitivity_png = make_parameter_sensitivity_chart(parameter_sensitivity or [])
+        if sensitivity_png:
+            images.append(InlineImage(cid=sensitivity_cid, content=sensitivity_png))
 
         charts: list[dict[str, Any]] = []
         for _, row in top.iterrows():
@@ -118,6 +135,9 @@ class ReportRenderer:
             recommendations=recos.to_dict(orient="records") if not recos.empty else [],
             charts=charts,
             gauge_cid=gauge_cid,
+            stability_cid=stability_cid,
+            sensitivity_cid=sensitivity_cid if sensitivity_png else "",
+            stability_score=int(stability_score),
         )
 
         ymd = trade_date.replace("-", "")

@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import datetime as dt
 import json
-import math
 import multiprocessing as mp
 import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -30,12 +29,24 @@ TAKE_ATR = [2.0, 3.0, 4.0, 5.0, 6.0]
 # Worker globals for fork-based multiprocessing (Linux sweet spot)
 _WORKER_DATASET: dict[str, pd.DataFrame] | None = None
 _WORKER_COSTS: CostModel | None = None
+_WORKER_CV_METHOD: str = "none"
+_WORKER_CV_SPLITS: int = 3
+_WORKER_CV_PURGE_DAYS: int = 2
 
 
-def _set_worker_context(dataset: dict[str, pd.DataFrame], costs: CostModel) -> None:
-    global _WORKER_DATASET, _WORKER_COSTS
+def _set_worker_context(
+    dataset: dict[str, pd.DataFrame],
+    costs: CostModel,
+    cv_method: str,
+    cv_splits: int,
+    cv_purge_days: int,
+) -> None:
+    global _WORKER_DATASET, _WORKER_COSTS, _WORKER_CV_METHOD, _WORKER_CV_SPLITS, _WORKER_CV_PURGE_DAYS
     _WORKER_DATASET = dataset
     _WORKER_COSTS = costs
+    _WORKER_CV_METHOD = cv_method
+    _WORKER_CV_SPLITS = cv_splits
+    _WORKER_CV_PURGE_DAYS = cv_purge_days
 
 
 def random_genome(rng: random.Random) -> Genome:
@@ -171,17 +182,157 @@ def fitness_from_agg(agg: dict[str, Any]) -> float:
     return float(f)
 
 
-def evaluate_genome(dataset: dict[str, pd.DataFrame], g: Genome, costs: CostModel) -> EvalSummary:
+def _time_splits(n_rows: int, mode: str, splits: int, purge_days: int) -> list[tuple[int, int]]:
+    if n_rows < 60:
+        return []
+    splits = max(2, int(splits))
+    test_len = max(20, n_rows // (splits + 1))
+    ranges: list[tuple[int, int]] = []
+
+    if mode == "walk_forward":
+        for i in range(splits):
+            end = n_rows - (splits - i - 1) * test_len
+            start = max(0, end - test_len)
+            if end - start >= 20:
+                ranges.append((start, end))
+        return ranges
+
+    # purged_cv: keep k contiguous folds and purge edges to reduce leakage
+    fold_len = max(20, n_rows // splits)
+    purge = max(0, int(purge_days))
+    for i in range(splits):
+        start = i * fold_len
+        end = n_rows if i == splits - 1 else (i + 1) * fold_len
+        start += purge
+        end -= purge
+        if end - start >= 20:
+            ranges.append((start, end))
+    return ranges
+
+
+def _evaluate_symbol_cv(df: pd.DataFrame, g: Genome, costs: CostModel, mode: str, splits: int, purge_days: int) -> list[BacktestMetrics]:
+    x = df.sort_values("date").reset_index(drop=True)
+    ranges = _time_splits(len(x), mode=mode, splits=splits, purge_days=purge_days)
+    metrics: list[BacktestMetrics] = []
+    for start, end in ranges:
+        sub = x.iloc[start:end].copy()
+        r = backtest(sub, g, costs)
+        if r.metrics.n_days > 0:
+            metrics.append(r.metrics)
+    return metrics
+
+
+def _stability_score_from_cv(cv_metrics: list[BacktestMetrics]) -> int:
+    if not cv_metrics:
+        return 0
+    sharpe = np.array([m.sharpe for m in cv_metrics], dtype=float)
+    ann = np.array([m.annual_return for m in cv_metrics], dtype=float)
+    dd = np.array([abs(m.max_drawdown) for m in cv_metrics], dtype=float)
+    mean_sharpe = float(sharpe.mean())
+    stability_penalty = float(np.std(sharpe))
+    mean_ann = float(ann.mean())
+    mean_dd = float(dd.mean())
+    raw = 60 + 18 * mean_sharpe + 10 * mean_ann - 22 * mean_dd - 10 * stability_penalty
+    return int(max(0, min(100, round(raw))))
+
+
+def evaluate_genome(
+    dataset: dict[str, pd.DataFrame],
+    g: Genome,
+    costs: CostModel,
+    *,
+    cv_method: str = "none",
+    cv_splits: int = 3,
+    cv_purge_days: int = 2,
+) -> EvalSummary:
     metrics: list[BacktestMetrics] = []
     for _code, df in dataset.items():
-        r = backtest(df, g, costs)
-        if r.metrics.n_days <= 0:
-            continue
-        metrics.append(r.metrics)
+        if cv_method in {"walk_forward", "purged_cv"}:
+            metrics.extend(_evaluate_symbol_cv(df, g, costs, cv_method, cv_splits, cv_purge_days))
+        else:
+            r = backtest(df, g, costs)
+            if r.metrics.n_days <= 0:
+                continue
+            metrics.append(r.metrics)
 
     agg = _aggregate_metrics(metrics)
+    if cv_method in {"walk_forward", "purged_cv"}:
+        agg["stability_score"] = _stability_score_from_cv(metrics)
+        agg["cv_method"] = cv_method
+        agg["cv_splits"] = int(cv_splits)
+        agg["cv_mean_sharpe"] = float(agg.get("mean_sharpe", 0.0))
     fit = fitness_from_agg(agg)
     return EvalSummary(fitness=fit, metrics=agg | {"n_symbols": len(dataset)})
+
+
+def parameter_sensitivity(
+    dataset: dict[str, pd.DataFrame],
+    g: Genome,
+    costs: CostModel,
+    *,
+    cv_method: str = "none",
+    cv_splits: int = 3,
+    cv_purge_days: int = 2,
+) -> list[dict[str, float | str]]:
+    baseline = evaluate_genome(
+        dataset,
+        g,
+        costs,
+        cv_method=cv_method,
+        cv_splits=cv_splits,
+        cv_purge_days=cv_purge_days,
+    ).fitness
+    specs = [
+        ("fast_ma", FAST_MA),
+        ("slow_ma", SLOW_MA),
+        ("rsi_period", RSI_PERIOD),
+        ("rsi_buy", RSI_BUY),
+        ("rsi_sell", RSI_SELL),
+        ("atr_period", ATR_PERIOD),
+        ("stop_loss_atr", STOP_ATR),
+        ("take_profit_atr", TAKE_ATR),
+    ]
+    out: list[dict[str, float | str]] = []
+    gd = g.to_dict()
+    for field, space in specs:
+        cur = gd[field]
+        i = space.index(cur)
+        lo = space[max(0, i - 1)]
+        hi = space[min(len(space) - 1, i + 1)]
+
+        d_lo = {**gd, field: lo}
+        d_hi = {**gd, field: hi}
+        if d_lo["slow_ma"] <= d_lo["fast_ma"] or d_lo["rsi_sell"] <= d_lo["rsi_buy"]:
+            lo_fit = baseline
+        else:
+            lo_fit = evaluate_genome(
+                dataset,
+                Genome.from_dict(d_lo),
+                costs,
+                cv_method=cv_method,
+                cv_splits=cv_splits,
+                cv_purge_days=cv_purge_days,
+            ).fitness
+        if d_hi["slow_ma"] <= d_hi["fast_ma"] or d_hi["rsi_sell"] <= d_hi["rsi_buy"]:
+            hi_fit = baseline
+        else:
+            hi_fit = evaluate_genome(
+                dataset,
+                Genome.from_dict(d_hi),
+                costs,
+                cv_method=cv_method,
+                cv_splits=cv_splits,
+                cv_purge_days=cv_purge_days,
+            ).fitness
+        out.append(
+            {
+                "param": field,
+                "base": float(baseline),
+                "down": float(lo_fit - baseline),
+                "up": float(hi_fit - baseline),
+            }
+        )
+    return out
 
 
 def _evaluate_worker(genome_dict: dict[str, Any]) -> tuple[tuple, EvalSummary]:
@@ -189,7 +340,14 @@ def _evaluate_worker(genome_dict: dict[str, Any]) -> tuple[tuple, EvalSummary]:
     if _WORKER_DATASET is None or _WORKER_COSTS is None:
         raise RuntimeError("Worker context not initialized. Use fork start method on Linux.")
     g = Genome.from_dict(genome_dict)
-    s = evaluate_genome(_WORKER_DATASET, g, _WORKER_COSTS)
+    s = evaluate_genome(
+        _WORKER_DATASET,
+        g,
+        _WORKER_COSTS,
+        cv_method=_WORKER_CV_METHOD,
+        cv_splits=_WORKER_CV_SPLITS,
+        cv_purge_days=_WORKER_CV_PURGE_DAYS,
+    )
     return _genome_key(g), s
 
 
@@ -208,6 +366,9 @@ class GAConfig:
     workers: int = 3
     seed: int | None = 42
     checkpoint_path: str | None = None
+    cv_method: str = "walk_forward"  # none / walk_forward / purged_cv
+    cv_splits: int = 3
+    cv_purge_days: int = 2
 
 
 class GeneticEngine:
@@ -232,7 +393,13 @@ class GeneticEngine:
 
         pool = None
         if ctx is not None and self.cfg.workers > 1:
-            _set_worker_context(self.dataset, self.costs)
+            _set_worker_context(
+                self.dataset,
+                self.costs,
+                self.cfg.cv_method,
+                self.cfg.cv_splits,
+                self.cfg.cv_purge_days,
+            )
             pool = ctx.Pool(processes=self.cfg.workers)
 
         try:
@@ -294,7 +461,14 @@ class GeneticEngine:
         if pool is None:
             for g in to_eval:
                 key = _genome_key(g)
-                self._cache[key] = evaluate_genome(self.dataset, g, self.costs)
+                self._cache[key] = evaluate_genome(
+                    self.dataset,
+                    g,
+                    self.costs,
+                    cv_method=self.cfg.cv_method,
+                    cv_splits=self.cfg.cv_splits,
+                    cv_purge_days=self.cfg.cv_purge_days,
+                )
             return
 
         # multiprocessing (fork): evaluate only missing genomes

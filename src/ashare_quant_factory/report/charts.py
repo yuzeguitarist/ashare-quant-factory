@@ -20,12 +20,13 @@ def make_candlestick_with_signals(
     df: pd.DataFrame,
     signals: pd.DataFrame,
     title: str,
-    spec: ChartSpec = ChartSpec(),
+    spec: ChartSpec | None = None,
 ) -> bytes:
     """Return PNG bytes for candlestick chart with entry/exit markers."""
     if df.empty:
         return b""
 
+    spec = spec or ChartSpec()
     x = df.copy().sort_values("date").reset_index(drop=True)
     x = x.tail(spec.window).copy()
 
@@ -104,6 +105,49 @@ def make_risk_gauge(score: int, title: str = "Risk Score") -> bytes:
 
     ax.text(0, -0.10, title, ha="center", va="center", fontsize=11, fontweight="bold")
     ax.text(0, -0.28, f"{score}/100", ha="center", va="center", fontsize=22, fontweight="bold")
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", transparent=True)
+    plt.close(fig)
+    return buf.getvalue()
+
+
+def make_stability_badge(score: int, title: str = "策略稳定性") -> bytes:
+    score = int(max(0, min(100, score)))
+    fig = plt.figure(figsize=(3.6, 2.2), dpi=170)
+    ax = fig.add_subplot(111)
+    ax.axis("off")
+
+    color = "#2ecc71" if score >= 75 else "#f1c40f" if score >= 55 else "#e74c3c"
+    ax.text(0.5, 0.72, title, ha="center", va="center", fontsize=12, fontweight="bold")
+    ax.text(0.5, 0.38, f"{score}/100", ha="center", va="center", fontsize=28, fontweight="bold", color=color)
+    ax.text(0.5, 0.12, "基于CV折间收益/Sharpe稳定度", ha="center", va="center", fontsize=8, alpha=0.75)
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", transparent=True)
+    plt.close(fig)
+    return buf.getvalue()
+
+
+def make_parameter_sensitivity_chart(rows: list[dict[str, float | str]], title: str = "参数敏感性") -> bytes:
+    if not rows:
+        return b""
+    labels = [str(r["param"]) for r in rows]
+    down = np.array([float(r.get("down", 0.0)) for r in rows], dtype=float)
+    up = np.array([float(r.get("up", 0.0)) for r in rows], dtype=float)
+
+    fig = plt.figure(figsize=(6.2, 2.8), dpi=170)
+    ax = fig.add_subplot(111)
+    x = np.arange(len(labels))
+    ax.bar(x - 0.18, down, width=0.34, label="-1档", color="#5dade2", alpha=0.9)
+    ax.bar(x + 0.18, up, width=0.34, label="+1档", color="#af7ac5", alpha=0.9)
+    ax.axhline(0.0, color="#dddddd", lw=1)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=28, ha="right", fontsize=8)
+    ax.set_ylabel("ΔFitness")
+    ax.set_title(title)
+    ax.legend(loc="upper right", fontsize=8)
+    fig.tight_layout()
 
     buf = io.BytesIO()
     fig.savefig(buf, format="png", bbox_inches="tight", transparent=True)

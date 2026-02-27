@@ -23,12 +23,12 @@ from .db.repository import (
     save_report_run,
     set_kv,
 )
-from .db.session import create_sqlite_engine, init_db
+from .db.session import create_engine_from_settings, init_db
 from .logging import get_logger
 from .report.emailer import send_html_email
 from .report.renderer import ReportRenderer
-from .strategy.backtester import CostModel, Genome, backtest
-from .strategy.genetic import GAConfig, GeneticEngine
+from .strategy.backtester import CostModel, backtest
+from .strategy.genetic import GAConfig, GeneticEngine, parameter_sensitivity
 from .strategy.recommender import make_recommendations
 from .timeutils import combine_local, parse_hhmm, parse_yyyy_mm_dd, tz_now
 from .utils.lock import file_lock
@@ -49,7 +49,7 @@ class NightlyPipeline:
     def __init__(self, settings: Settings):
         self.settings = settings
 
-        engine = create_sqlite_engine(settings.db_path)
+        engine = create_engine_from_settings(settings)
         init_db(engine)
         self.db = DB(engine)
 
@@ -150,6 +150,9 @@ class NightlyPipeline:
                 workers=self.settings.ga.workers,
                 seed=self.settings.ga.seed,
                 checkpoint_path=str(checkpoint),
+                cv_method=self.settings.ga.cv_method,
+                cv_splits=self.settings.ga.cv_splits,
+                cv_purge_days=self.settings.ga.cv_purge_days,
             )
 
             log.info(f"[AQF] GA evolve until {stop_at} ... (workers={ga_cfg.workers})")
@@ -157,6 +160,15 @@ class NightlyPipeline:
             best_g, best_s = engine.evolve_until(stop_at)
 
             log.info(f"[AQF] GA best fitness={best_s.fitness:.4f} genome={best_g.to_dict()}")
+            sensitivity = parameter_sensitivity(
+                dataset_eval,
+                best_g,
+                self.costs,
+                cv_method=ga_cfg.cv_method,
+                cv_splits=ga_cfg.cv_splits,
+                cv_purge_days=ga_cfg.cv_purge_days,
+            )
+            best_s.metrics["parameter_sensitivity"] = sensitivity
             save_best_strategy(
                 self.db,
                 trade_date=trade_date,
@@ -198,6 +210,8 @@ class NightlyPipeline:
                 recommendations=recos,
                 dataset=dataset_full,
                 signals_map=signals_map,
+                stability_score=int(best_s.metrics.get("stability_score", 0)),
+                parameter_sensitivity=best_s.metrics.get("parameter_sensitivity", []),
                 out_dir=self.settings.reports_dir,
                 top_charts=self.settings.risk.top_charts,
                 tz_name=self.settings.project.timezone,

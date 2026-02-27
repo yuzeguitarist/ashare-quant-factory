@@ -36,6 +36,12 @@ dependencies = [
   "rich>=13.7.1",
 ]
 
+
+[project.optional-dependencies]
+postgres = [
+  "psycopg[binary]>=3.2.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/yourname/ashare-quant-factory"
 Repository = "https://github.com/yourname/ashare-quant-factory"
