@@ -6,6 +6,17 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! python3 -c "import venv" >/dev/null 2>&1; then
+  echo "[AQF] python3 venv module is missing. Installing python3-venv..."
+  if command -v sudo >/dev/null 2>&1; then
+    sudo apt-get update
+    sudo apt-get install -y python3-venv
+  else
+    apt-get update
+    apt-get install -y python3-venv
+  fi
+fi
+
 echo "[AQF] Creating venv..."
 python3 -m venv .venv
 source .venv/bin/activate
