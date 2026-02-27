@@ -121,24 +121,22 @@ def make_recommendations(
     costs: CostModel,
     max_weight_per_symbol: float = 0.20,
 ) -> pd.DataFrame:
-    recs: list[Recommendation] = []
-
     scores: list[float] = []
     tmp: list[dict[str, Any]] = []
 
     for code, df in dataset.items():
         if df.empty:
-            recs.append(
-                Recommendation(
-                    code=code,
-                    action="HOLD",
-                    weight=0.0,
-                    stop_loss=None,
-                    take_profit=None,
-                    expected_return=None,
-                    risk_score=None,
-                    note="No data in DB",
-                )
+            tmp.append(
+                {
+                    "code": code,
+                    "action": "HOLD",
+                    "stop_loss": None,
+                    "take_profit": None,
+                    "expected_return": None,
+                    "risk_score": None,
+                    "note": "No data in DB",
+                    "_score": 0.0,
+                }
             )
             scores.append(0.0)
             continue
