@@ -36,7 +36,7 @@ AQF 在一台普通云服务器（**DigitalOcean 4C/8GB/50GB SSD**）上稳定�
 
 ### 1) 克隆 & 安装
 ```bash
-git clone https://github.com/yourname/ashare-quant-factory.git
+git clone https://github.com/yuzeguitarist/ashare-quant-factory.git
 cd ashare-quant-factory
 
 bash scripts/bootstrap_ubuntu.sh
