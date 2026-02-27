@@ -42,33 +42,43 @@ cd ashare-quant-factory
 bash scripts/bootstrap_ubuntu.sh
 ```
 
-### 2) 配置自选股与邮件
+### 2) 通过交互式向导完成配置（推荐）
+```bash
+aqf setup --open-gmail-guide
+```
+
+向导会一步步引导你完成：
+
+- 自选股（`watchlist`，Baostock 格式，如 `sh.600519`）
+- Gmail 发件地址、App Password、收件人
+- 自动生成 `config.yaml` 与 `.env`，无需手动执行 `nano`
+
+> Gmail App Password 官方入口：<https://myaccount.google.com/apppasswords>
+
+### 3) （可选）手动方式配置
+
+如果你不想使用交互式向导，也可以手动：
+
 ```bash
 cp config.example.yaml config.yaml
 cp .env.example .env
-nano config.yaml
-nano .env
 ```
 
-- **自选股**：在 `config.yaml` 的 `watchlist` 中填入（Baostock 格式，例如 `sh.600519`）
-- **Gmail**：建议开启两步验证并创建 **App Password**，填入 `.env`：
-  - `AQF_GMAIL_ADDRESS=你的Gmail`
-  - `AQF_GMAIL_APP_PASSWORD=你的AppPassword`
-  - `AQF_EMAIL_TO=目标邮箱1,目标邮箱2`
+然后再编辑文件填入配置。
 
-### 3) 初始化数据库（可选，但推荐）
+### 4) 初始化数据库（可选，但推荐）
 ```bash
 . .venv/bin/activate
 aqf doctor
 aqf init-db
 ```
 
-### 4) 以前台方式试跑一次（推荐）
+### 5) 以前台方式试跑一次（推荐）
 ```bash
 aqf run-once
 ```
 
-### 5) 安装为 systemd 后台服务（生产推荐）
+### 6) 安装为 systemd 后台服务（生产推荐）
 ```bash
 sudo bash scripts/install_systemd.sh
 sudo systemctl status aqf
@@ -101,6 +111,7 @@ sudo systemctl status aqf
 ```bash
 aqf --help
 
+aqf setup           # 交互式初始化（自动生成 config.yaml + .env）
 aqf doctor          # 环境自检（Baostock、DB、邮箱）
 aqf init-db         # 初始化 SQLite
 aqf run             # 后台调度（建议配合 systemd）
