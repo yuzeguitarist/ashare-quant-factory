@@ -16,7 +16,7 @@ from rich.table import Table
 
 from .config import Settings, load_settings
 from .data.baostock_client import BaostockSession
-from .db.session import create_sqlite_engine, init_db
+from .db.session import create_db_engine, init_db
 from .logging import setup_logging
 from .pipeline import NightlyPipeline
 from .report.emailer import load_gmail_credentials
@@ -102,7 +102,7 @@ def doctor(
 
     # DB
     try:
-        engine = create_sqlite_engine(settings.db_path)
+        engine = create_db_engine(settings.db_path, settings.db_url)
         init_db(engine)
         table.add_row("SQLite", "OK", str(settings.db_path))
     except Exception as e:  # noqa: BLE001
@@ -125,7 +125,7 @@ def init_db_cmd(ctx: typer.Context):
     config: Path = ctx.obj["config"]
     env: Optional[Path] = ctx.obj["env"]
     settings = _load(config, env)
-    engine = create_sqlite_engine(settings.db_path)
+    engine = create_db_engine(settings.db_path, settings.db_url)
     init_db(engine)
     console.print(f"[bold green]OK[/] db initialized: {settings.db_path}")
 
@@ -259,13 +259,13 @@ def fetch(ctx: typer.Context):
     from .calendar import get_trade_day_now
     from .data.fetcher import DataFetcher
     from .db.repository import DB
-    from .db.session import create_sqlite_engine, init_db
+    from .db.session import create_db_engine, init_db
 
     config: Path = ctx.obj["config"]
     env: Optional[Path] = ctx.obj["env"]
     settings = _load(config, env)
 
-    engine = create_sqlite_engine(settings.db_path)
+    engine = create_db_engine(settings.db_path, settings.db_url)
     init_db(engine)
     db = DB(engine)
     td = get_trade_day_now(settings.project.timezone)
@@ -283,7 +283,7 @@ def evolve(
     """仅运行 GA（读取 DB 数据），保存最优策略到数据库。"""
     from .calendar import get_trade_day_now
     from .db.repository import DB, save_best_strategy
-    from .db.session import create_sqlite_engine, init_db
+    from .db.session import create_db_engine, init_db
     from .db.repository import load_bars
     from .strategy.genetic import GAConfig, GeneticEngine
     from .strategy.backtester import CostModel
@@ -293,7 +293,7 @@ def evolve(
     env: Optional[Path] = ctx.obj["env"]
     settings = _load(config, env)
 
-    engine = create_sqlite_engine(settings.db_path)
+    engine = create_db_engine(settings.db_path, settings.db_url)
     init_db(engine)
     db = DB(engine)
 
@@ -328,6 +328,9 @@ def evolve(
         workers=settings.ga.workers,
         seed=settings.ga.seed,
         checkpoint_path=str(checkpoint),
+        cv_mode=settings.ga.cv_mode,
+        cv_splits=settings.ga.cv_splits,
+        cv_purge_days=settings.ga.cv_purge_days,
     )
 
     console.print(f"[cyan]Evolving until[/] {stop_at} (workers={ga_cfg.workers}) ...")
@@ -354,7 +357,7 @@ def report(
         save_recommendations,
         save_report_run,
     )
-    from .db.session import create_sqlite_engine, init_db
+    from .db.session import create_db_engine, init_db
     from .report.renderer import ReportRenderer
     from .strategy.backtester import CostModel, Genome, backtest
     from .strategy.recommender import make_recommendations
@@ -364,7 +367,7 @@ def report(
     env: Optional[Path] = ctx.obj["env"]
     settings = _load(config, env)
 
-    engine = create_sqlite_engine(settings.db_path)
+    engine = create_db_engine(settings.db_path, settings.db_url)
     init_db(engine)
     db = DB(engine)
 

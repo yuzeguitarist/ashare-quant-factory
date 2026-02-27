@@ -103,6 +103,7 @@ sudo systemctl status aqf
 - **基金经理风格的日报**：大字号、颜色编码、风险仪表盘
 - **嵌入式 K 线 + 信号图**
 - **回测指标与参数解释**
+- **策略稳定性评分 + 参数敏感性小图**（邮件中直接展示）
 
 ---
 
@@ -113,7 +114,7 @@ aqf --help
 
 aqf setup           # 交互式初始化（自动生成 config.yaml + .env）
 aqf doctor          # 环境自检（Baostock、DB、邮箱）
-aqf init-db         # 初始化 SQLite
+aqf init-db         # 初始化数据库（默认 SQLite，也支持 db_url 指向 Postgres）
 aqf run             # 后台调度（建议配合 systemd）
 aqf run-once        # 立即跑一次（包含轮询、拉取、进化、出报告、发邮件）
 aqf fetch           # 仅拉取并增量入库

@@ -7,7 +7,7 @@ import multiprocessing as mp
 import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -30,12 +30,24 @@ TAKE_ATR = [2.0, 3.0, 4.0, 5.0, 6.0]
 # Worker globals for fork-based multiprocessing (Linux sweet spot)
 _WORKER_DATASET: dict[str, pd.DataFrame] | None = None
 _WORKER_COSTS: CostModel | None = None
+_WORKER_CV_MODE: str = "plain"
+_WORKER_CV_SPLITS: int = 4
+_WORKER_CV_PURGE_DAYS: int = 3
 
 
-def _set_worker_context(dataset: dict[str, pd.DataFrame], costs: CostModel) -> None:
-    global _WORKER_DATASET, _WORKER_COSTS
+def _set_worker_context(
+    dataset: dict[str, pd.DataFrame],
+    costs: CostModel,
+    cv_mode: str,
+    cv_splits: int,
+    cv_purge_days: int,
+) -> None:
+    global _WORKER_DATASET, _WORKER_COSTS, _WORKER_CV_MODE, _WORKER_CV_SPLITS, _WORKER_CV_PURGE_DAYS
     _WORKER_DATASET = dataset
     _WORKER_COSTS = costs
+    _WORKER_CV_MODE = cv_mode
+    _WORKER_CV_SPLITS = cv_splits
+    _WORKER_CV_PURGE_DAYS = cv_purge_days
 
 
 def random_genome(rng: random.Random) -> Genome:
@@ -147,6 +159,39 @@ def _aggregate_metrics(metrics: list[BacktestMetrics]) -> dict[str, Any]:
     }
 
 
+def _build_slices(df: pd.DataFrame, cv_mode: str, cv_splits: int, cv_purge_days: int) -> list[pd.DataFrame]:
+    if df.empty:
+        return []
+    x = df.sort_values("date").reset_index(drop=True)
+    n = len(x)
+    if n < 80 or cv_splits <= 1 or cv_mode == "plain":
+        return [x]
+
+    if cv_mode == "walk_forward":
+        folds: list[pd.DataFrame] = []
+        for i in range(1, cv_splits + 1):
+            end = max(20, int((i / cv_splits) * n))
+            if end >= 30:
+                folds.append(x.iloc[:end].copy())
+        return folds or [x]
+
+    if cv_mode == "purged_kfold":
+        folds = []
+        fold_size = max(15, n // cv_splits)
+        purge = max(0, cv_purge_days)
+        for i in range(cv_splits):
+            start = i * fold_size
+            end = n if i == cv_splits - 1 else min(n, (i + 1) * fold_size)
+            left_end = max(0, start - purge)
+            right_start = min(n, end + purge)
+            train = pd.concat([x.iloc[:left_end], x.iloc[right_start:]], axis=0).reset_index(drop=True)
+            if len(train) >= 30:
+                folds.append(train)
+        return folds or [x]
+
+    return [x]
+
+
 def fitness_from_agg(agg: dict[str, Any]) -> float:
     """Composite fitness (higher is better)."""
     if agg["valid_symbols"] <= 0:
@@ -168,20 +213,78 @@ def fitness_from_agg(agg: dict[str, Any]) -> float:
     if mean_ann > 1.5:
         f -= (mean_ann - 1.5) * 0.5
 
-    return float(f)
+    stability_penalty = max(0.0, float(agg.get("cv_sharpe_std", 0.0))) * 0.25
+    return float(f - stability_penalty)
 
 
-def evaluate_genome(dataset: dict[str, pd.DataFrame], g: Genome, costs: CostModel) -> EvalSummary:
+def _parameter_sensitivity(dataset: dict[str, pd.DataFrame], g: Genome, costs: CostModel) -> list[dict[str, Any]]:
+    candidates = [
+        ("fast_ma", [x for x in FAST_MA if x != g.fast_ma]),
+        ("slow_ma", [x for x in SLOW_MA if x > g.fast_ma and x != g.slow_ma]),
+        ("rsi_buy", [x for x in RSI_BUY if x != g.rsi_buy and x < g.rsi_sell]),
+        ("rsi_sell", [x for x in RSI_SELL if x != g.rsi_sell and x > g.rsi_buy]),
+        ("stop_loss_atr", [x for x in STOP_ATR if x != g.stop_loss_atr]),
+        ("take_profit_atr", [x for x in TAKE_ATR if x != g.take_profit_atr]),
+    ]
+    baseline = evaluate_genome(dataset, g, costs, cv_mode="plain", cv_splits=1, cv_purge_days=0, include_sensitivity=False).fitness
+    out: list[dict[str, Any]] = []
+    for name, values in candidates:
+        deltas: list[float] = []
+        for v in values[:3]:
+            d = g.to_dict()
+            d[name] = v
+            neighbor = Genome.from_dict(d)
+            score = evaluate_genome(dataset, neighbor, costs, cv_mode="plain", cv_splits=1, cv_purge_days=0, include_sensitivity=False).fitness
+            deltas.append(abs(score - baseline))
+        out.append({"param": name, "impact": float(np.mean(deltas) if deltas else 0.0)})
+    return sorted(out, key=lambda x: x["impact"], reverse=True)
+
+
+def evaluate_genome(
+    dataset: dict[str, pd.DataFrame],
+    g: Genome,
+    costs: CostModel,
+    cv_mode: str = "plain",
+    cv_splits: int = 4,
+    cv_purge_days: int = 3,
+    include_sensitivity: bool = True,
+) -> EvalSummary:
     metrics: list[BacktestMetrics] = []
+    cv_sharpes: list[float] = []
+    fold_count = 0
+
     for _code, df in dataset.items():
-        r = backtest(df, g, costs)
-        if r.metrics.n_days <= 0:
-            continue
-        metrics.append(r.metrics)
+        slices = _build_slices(df, cv_mode=cv_mode, cv_splits=cv_splits, cv_purge_days=cv_purge_days)
+        for sub_df in slices:
+            r = backtest(sub_df, g, costs)
+            if r.metrics.n_days <= 0:
+                continue
+            metrics.append(r.metrics)
+            cv_sharpes.append(float(r.metrics.sharpe))
+            fold_count += 1
 
     agg = _aggregate_metrics(metrics)
+    cv_std = float(np.std(np.asarray(cv_sharpes), ddof=1)) if len(cv_sharpes) >= 2 else 0.0
+    stability_score = int(max(0, min(100, round(100.0 / (1.0 + max(0.0, cv_std))))))
+
+    agg.update(
+        {
+            "n_symbols": len(dataset),
+            "cv_mode": cv_mode,
+            "cv_splits": int(cv_splits),
+            "cv_fold_count": int(fold_count),
+            "cv_sharpe_std": float(cv_std),
+            "stability_score": int(stability_score),
+        }
+    )
+
+    if include_sensitivity:
+        agg["param_sensitivity"] = _parameter_sensitivity(dataset, g, costs)
+    else:
+        agg["param_sensitivity"] = []
+
     fit = fitness_from_agg(agg)
-    return EvalSummary(fitness=fit, metrics=agg | {"n_symbols": len(dataset)})
+    return EvalSummary(fitness=fit, metrics=agg)
 
 
 def _evaluate_worker(genome_dict: dict[str, Any]) -> tuple[tuple, EvalSummary]:
@@ -189,7 +292,14 @@ def _evaluate_worker(genome_dict: dict[str, Any]) -> tuple[tuple, EvalSummary]:
     if _WORKER_DATASET is None or _WORKER_COSTS is None:
         raise RuntimeError("Worker context not initialized. Use fork start method on Linux.")
     g = Genome.from_dict(genome_dict)
-    s = evaluate_genome(_WORKER_DATASET, g, _WORKER_COSTS)
+    s = evaluate_genome(
+        _WORKER_DATASET,
+        g,
+        _WORKER_COSTS,
+        cv_mode=_WORKER_CV_MODE,
+        cv_splits=_WORKER_CV_SPLITS,
+        cv_purge_days=_WORKER_CV_PURGE_DAYS,
+    )
     return _genome_key(g), s
 
 
@@ -208,6 +318,9 @@ class GAConfig:
     workers: int = 3
     seed: int | None = 42
     checkpoint_path: str | None = None
+    cv_mode: str = "plain"
+    cv_splits: int = 4
+    cv_purge_days: int = 3
 
 
 class GeneticEngine:
@@ -223,7 +336,6 @@ class GeneticEngine:
         best_g = pop[0]
         best_s = EvalSummary(fitness=-1e9, metrics={})
 
-        # Prefer fork-based multiprocessing on Linux for speed.
         ctx = None
         try:
             ctx = mp.get_context("fork")
@@ -232,7 +344,13 @@ class GeneticEngine:
 
         pool = None
         if ctx is not None and self.cfg.workers > 1:
-            _set_worker_context(self.dataset, self.costs)
+            _set_worker_context(
+                self.dataset,
+                self.costs,
+                self.cfg.cv_mode,
+                self.cfg.cv_splits,
+                self.cfg.cv_purge_days,
+            )
             pool = ctx.Pool(processes=self.cfg.workers)
 
         try:
@@ -255,11 +373,11 @@ class GeneticEngine:
                         f"[bold cyan]GA[/] gen={gen} best_fitness={best_s.fitness:.4f} "
                         f"mean_sharpe={best_s.metrics.get('mean_sharpe', 0):.3f} "
                         f"mean_ann={best_s.metrics.get('mean_annual_return', 0):.3f} "
-                        f"mean_dd={best_s.metrics.get('mean_max_drawdown', 0):.3f}"
+                        f"mean_dd={best_s.metrics.get('mean_max_drawdown', 0):.3f} "
+                        f"stability={best_s.metrics.get('stability_score', 0)}"
                     )
                     self._maybe_checkpoint(gen, best_g, best_s)
 
-                # next generation
                 order = np.argsort(np.asarray(fitnesses))[::-1]
                 elites = [pop[i] for i in order[: self.cfg.elite_size]]
 
@@ -294,10 +412,16 @@ class GeneticEngine:
         if pool is None:
             for g in to_eval:
                 key = _genome_key(g)
-                self._cache[key] = evaluate_genome(self.dataset, g, self.costs)
+                self._cache[key] = evaluate_genome(
+                    self.dataset,
+                    g,
+                    self.costs,
+                    cv_mode=self.cfg.cv_mode,
+                    cv_splits=self.cfg.cv_splits,
+                    cv_purge_days=self.cfg.cv_purge_days,
+                )
             return
 
-        # multiprocessing (fork): evaluate only missing genomes
         payloads = [g.to_dict() for g in to_eval]
         for key, summary in pool.imap_unordered(_evaluate_worker, payloads, chunksize=4):
             self._cache[key] = summary

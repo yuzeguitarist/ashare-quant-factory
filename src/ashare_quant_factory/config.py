@@ -35,6 +35,7 @@ class Project:
 @dataclass(frozen=True)
 class Paths:
     db: str = "data/aqf.sqlite3"
+    db_url: str = ""
     reports_dir: str = "data/reports"
     lock_file: str = "data/aqf.lock"
 
@@ -69,6 +70,9 @@ class GA:
     workers: int = 3
     max_eval_symbols: int = 0
     seed: int | None = 42
+    cv_mode: str = "plain"  # plain|walk_forward|purged_kfold
+    cv_splits: int = 4
+    cv_purge_days: int = 3
 
 
 @dataclass(frozen=True)
@@ -101,6 +105,10 @@ class Settings:
     @property
     def db_path(self) -> Path:
         return _as_path(self.paths.db)
+
+    @property
+    def db_url(self) -> str:
+        return str(self.paths.db_url or "").strip()
 
     @property
     def reports_dir(self) -> Path:
@@ -139,7 +147,12 @@ def load_settings(config_path: str | Path, env_path: str | Path | None = None) -
 
     defaults: dict[str, Any] = {
         "project": {"name": Project.name, "timezone": Project.timezone},
-        "paths": {"db": Paths.db, "reports_dir": Paths.reports_dir, "lock_file": Paths.lock_file},
+        "paths": {
+            "db": Paths.db,
+            "db_url": Paths.db_url,
+            "reports_dir": Paths.reports_dir,
+            "lock_file": Paths.lock_file,
+        },
         "data": {"history_start": Data.history_start, "probe_symbol": Data.probe_symbol},
         "schedule": {
             "poll_start_time": Schedule.poll_start_time,
@@ -161,6 +174,9 @@ def load_settings(config_path: str | Path, env_path: str | Path | None = None) -
             "workers": GA.workers,
             "max_eval_symbols": GA.max_eval_symbols,
             "seed": GA.seed,
+            "cv_mode": GA.cv_mode,
+            "cv_splits": GA.cv_splits,
+            "cv_purge_days": GA.cv_purge_days,
         },
         "risk": {"max_weight_per_symbol": Risk.max_weight_per_symbol, "top_charts": Risk.top_charts},
         "email": {

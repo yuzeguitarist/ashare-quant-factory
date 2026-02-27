@@ -151,9 +151,31 @@
           <div class="label">均值最大回撤</div>
           <div class="value">{{ "%.1f%%"|format(ga_metrics.mean_max_drawdown*100) }}</div>
         </div>
+        <div class="item">
+          <div class="label">策略稳定性评分</div>
+          <div class="value">{{ ga_metrics.stability_score or 0 }}/100</div>
+        </div>
       </div>
 
+
       <div class="hr"></div>
+      <div class="grid">
+        <div>
+          <div style="font-weight:800; font-size:16px; margin-bottom:8px;">策略稳定性（CV）</div>
+          <img alt="stability score" src="cid:{{ stability_cid }}" />
+          <div class="muted">支持 plain / walk-forward / purged-kfold，分数越高越稳定。</div>
+        </div>
+        <div>
+          <div style="font-weight:800; font-size:16px; margin-bottom:8px;">参数敏感性</div>
+          {% if sensitivity_cid %}
+          <img alt="parameter sensitivity" src="cid:{{ sensitivity_cid }}" />
+          {% else %}
+          <div class="muted">参数敏感性暂无数据。</div>
+          {% endif %}
+          <div class="muted">展示关键参数微调后 fitness 变化幅度，越高表示越敏感。</div>
+        </div>
+      </div>
+
 
       <div class="grid">
         <div>
