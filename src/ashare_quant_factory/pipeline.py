@@ -23,7 +23,7 @@ from .db.repository import (
     save_report_run,
     set_kv,
 )
-from .db.session import create_sqlite_engine, init_db
+from .db.session import create_db_engine, init_db
 from .logging import get_logger
 from .report.emailer import send_html_email
 from .report.renderer import ReportRenderer
@@ -49,7 +49,7 @@ class NightlyPipeline:
     def __init__(self, settings: Settings):
         self.settings = settings
 
-        engine = create_sqlite_engine(settings.db_path)
+        engine = create_db_engine(settings.db_path, settings.db_url)
         init_db(engine)
         self.db = DB(engine)
 
@@ -150,6 +150,9 @@ class NightlyPipeline:
                 workers=self.settings.ga.workers,
                 seed=self.settings.ga.seed,
                 checkpoint_path=str(checkpoint),
+                cv_mode=self.settings.ga.cv_mode,
+                cv_splits=self.settings.ga.cv_splits,
+                cv_purge_days=self.settings.ga.cv_purge_days,
             )
 
             log.info(f"[AQF] GA evolve until {stop_at} ... (workers={ga_cfg.workers})")

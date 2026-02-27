@@ -12,6 +12,8 @@ project:
 paths:
   # SQLite 数据库文件路径（建议放在仓库 data/ 目录）
   db: "data/aqf.sqlite3"
+  # 可选：Postgres/其他 SQLAlchemy URL。设置后优先于 db（例：postgresql+psycopg://user:pass@localhost:5432/aqf）
+  db_url: ""
   # 报告输出目录（每天会生成一份 HTML，同时会把图表落盘）
   reports_dir: "data/reports"
   # 运行锁文件（防止重复启动）
@@ -62,6 +64,12 @@ ga:
   max_eval_symbols: 0
   # 固定随机种子：便于复现实验（可改为 null 让每天不同）
   seed: 42
+  # 防过拟合评估模式：plain | walk_forward | purged_kfold
+  cv_mode: "walk_forward"
+  # CV 切分数
+  cv_splits: 4
+  # purged_kfold 模式下训练窗口两侧剔除天数
+  cv_purge_days: 3
 
 risk:
   # 单只股票最大建议仓位

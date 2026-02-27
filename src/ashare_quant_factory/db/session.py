@@ -13,5 +13,11 @@ def create_sqlite_engine(db_path: str | Path) -> Engine:
     return create_engine(f"sqlite:///{db_path}", future=True)
 
 
+def create_db_engine(db_path: str | Path, db_url: str = "") -> Engine:
+    if db_url.strip():
+        return create_engine(db_url.strip(), future=True, pool_pre_ping=True)
+    return create_sqlite_engine(db_path)
+
+
 def init_db(engine: Engine) -> None:
     metadata.create_all(engine)
