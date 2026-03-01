@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=/opt/ashare-quant-factory
 # 建议将仓库部署到 /opt/ashare-quant-factory，并给出正确路径
-ExecStart=/opt/ashare-quant-factory/.venv/bin/aqf run --config /etc/aqf/config.yaml
+ExecStart=/opt/ashare-quant-factory/.venv/bin/aqf --config /etc/aqf/config.yaml run
 Restart=always
 RestartSec=5
 
