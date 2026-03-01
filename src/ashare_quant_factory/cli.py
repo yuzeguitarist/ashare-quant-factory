@@ -173,14 +173,20 @@ def setup(
     console.print("3) 复制 16 位 App Password（可带空格，脚本会自动清理）\n")
 
     if open_gmail_guide:
-        try:
-            opened = webbrowser.open(GMAIL_APP_PASSWORD_GUIDE)
-            if opened:
-                console.print("[green]已尝试打开浏览器。[/]")
-            else:
-                console.print(f"[yellow]未能自动打开，请手动访问：{GMAIL_APP_PASSWORD_GUIDE}[/]")
-        except Exception as e:  # noqa: BLE001
-            console.print(f"[yellow]打开浏览器失败：{e}。请手动访问：{GMAIL_APP_PASSWORD_GUIDE}[/]")
+        is_headless_linux = platform.system() == "Linux" and not (
+            os.getenv("DISPLAY") or os.getenv("WAYLAND_DISPLAY")
+        )
+        if is_headless_linux:
+            console.print(f"[yellow]检测到无图形界面环境，请手动访问：{GMAIL_APP_PASSWORD_GUIDE}[/]")
+        else:
+            try:
+                opened = webbrowser.open(GMAIL_APP_PASSWORD_GUIDE)
+                if opened:
+                    console.print("[green]已尝试打开浏览器。[/]")
+                else:
+                    console.print(f"[yellow]未能自动打开，请手动访问：{GMAIL_APP_PASSWORD_GUIDE}[/]")
+            except Exception as e:  # noqa: BLE001
+                console.print(f"[yellow]打开浏览器失败：{e}。请手动访问：{GMAIL_APP_PASSWORD_GUIDE}[/]")
 
     gmail_address = typer.prompt("Gmail 发件地址", default=os.getenv("AQF_GMAIL_ADDRESS", "yourname@gmail.com"))
     app_password = typer.prompt("Gmail App Password", hide_input=True).replace(" ", "")

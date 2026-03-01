@@ -44,7 +44,9 @@ bash scripts/bootstrap_ubuntu.sh
 
 ### 2) 通过交互式向导完成配置（推荐）
 ```bash
-aqf setup --open-gmail-guide
+./.venv/bin/aqf setup --open-gmail-guide
+# 如果脚本已自动安装全局命令，也可以直接用：
+# aqf setup --open-gmail-guide
 ```
 
 向导会一步步引导你完成：
@@ -68,14 +70,13 @@ cp .env.example .env
 
 ### 4) 初始化数据库（可选，但推荐）
 ```bash
-. .venv/bin/activate
-aqf doctor
-aqf init-db
+./.venv/bin/aqf doctor
+./.venv/bin/aqf init-db
 ```
 
 ### 5) 以前台方式试跑一次（推荐）
 ```bash
-aqf run-once
+./.venv/bin/aqf run-once
 ```
 
 ### 6) 安装为 systemd 后台服务（生产推荐）
