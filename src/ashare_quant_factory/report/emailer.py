@@ -11,8 +11,11 @@ from email.utils import formatdate, make_msgid
 from typing import Iterable
 
 from ..config import Settings
+from ..logging import get_logger
 from ..utils.retry import Retry, run_with_retry
 from .renderer import InlineImage
+
+log = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -31,6 +34,30 @@ def load_gmail_credentials() -> EmailCredentials:
     return EmailCredentials(address=addr, app_password=pwd)
 
 
+def _env_float(name: str, default: float, *, min_value: float, max_value: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        log.warning("[AQF] Invalid %s=%r. Use default=%s", name, raw, default)
+        return default
+    return max(min_value, min(max_value, value))
+
+
+def _env_int(name: str, default: int, *, min_value: int, max_value: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        log.warning("[AQF] Invalid %s=%r. Use default=%s", name, raw, default)
+        return default
+    return max(min_value, min(max_value, value))
+
+
 def send_html_email(
     *,
     settings: Settings,
@@ -40,6 +67,9 @@ def send_html_email(
     images: list[InlineImage],
 ) -> None:
     creds = load_gmail_credentials()
+    smtp_timeout = _env_float("AQF_SMTP_TIMEOUT_SECONDS", 8.0, min_value=2.0, max_value=60.0)
+    retry_attempts = _env_int("AQF_SMTP_RETRY_ATTEMPTS", 2, min_value=1, max_value=6)
+    retry_base_sleep = _env_float("AQF_SMTP_RETRY_BASE_SECONDS", 0.8, min_value=0.1, max_value=10.0)
 
     msg_root = MIMEMultipart("related")
     msg_root["Subject"] = subject
@@ -61,11 +91,20 @@ def send_html_email(
         msg_root.attach(part)
 
     def _send():
-        with smtplib.SMTP(settings.email.smtp_host, settings.email.smtp_port, timeout=30) as smtp:
+        host = settings.email.smtp_host
+        port = int(settings.email.smtp_port)
+        if port == 465:
+            with smtplib.SMTP_SSL(host, port, timeout=smtp_timeout) as smtp:
+                smtp.ehlo()
+                smtp.login(creds.address, creds.app_password)
+                smtp.send_message(msg_root)
+                return
+
+        with smtplib.SMTP(host, port, timeout=smtp_timeout) as smtp:
             smtp.ehlo()
             smtp.starttls()
             smtp.ehlo()
             smtp.login(creds.address, creds.app_password)
             smtp.send_message(msg_root)
 
-    run_with_retry(_send, Retry(attempts=4, base_sleep=1.0, max_sleep=8.0))
+    run_with_retry(_send, Retry(attempts=retry_attempts, base_sleep=retry_base_sleep, max_sleep=4.0))

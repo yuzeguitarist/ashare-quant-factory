@@ -2,18 +2,53 @@ from __future__ import annotations
 
 import io
 import math
+import warnings
 from dataclasses import dataclass
 
 import matplotlib.pyplot as plt
 import mplfinance as mpf
 import numpy as np
 import pandas as pd
+from matplotlib import font_manager as fm
 
 
 @dataclass(frozen=True)
 class ChartSpec:
     window: int = 140  # last N bars
     dpi: int = 140
+
+
+def _enable_cjk_font_support() -> None:
+    """Pick an available CJK font. If none exists, silence noisy glyph warnings."""
+    plt.rcParams["axes.unicode_minus"] = False
+    try:
+        available = {f.name for f in fm.fontManager.ttflist}
+    except Exception:  # noqa: BLE001 - best effort
+        available = set()
+
+    candidates = [
+        "Noto Sans CJK SC",
+        "Source Han Sans SC",
+        "WenQuanYi Zen Hei",
+        "Microsoft YaHei",
+        "PingFang SC",
+        "SimHei",
+    ]
+    for name in candidates:
+        if name in available:
+            current = list(plt.rcParams.get("font.sans-serif", []))
+            plt.rcParams["font.family"] = "sans-serif"
+            plt.rcParams["font.sans-serif"] = [name] + [x for x in current if x != name]
+            return
+
+    warnings.filterwarnings(
+        "ignore",
+        message=r"Glyph .* missing from font\(s\).*",
+        category=UserWarning,
+    )
+
+
+_enable_cjk_font_support()
 
 
 def make_candlestick_with_signals(

@@ -223,18 +223,26 @@ class NightlyPipeline:
                 raise RuntimeError("No email.to configured. Set email.to in config.yaml or AQF_EMAIL_TO in .env")
 
             subject = f"{self.settings.email.subject_prefix}{trade_date} Nightly Alpha (Next: {next_trade_date})"
-            send_html_email(
-                settings=self.settings,
-                subject=subject,
-                html=rendered.html,
-                to_emails=to_emails,
-                images=rendered.images,
-            )
+            email_sent = True
+            try:
+                send_html_email(
+                    settings=self.settings,
+                    subject=subject,
+                    html=rendered.html,
+                    to_emails=to_emails,
+                    images=rendered.images,
+                )
+            except Exception as e:  # noqa: BLE001
+                email_sent = False
+                log.exception(f"[AQF] Email send failed: {e}. Report kept at {rendered.html_path}")
 
             save_report_run(self.db, trade_date, str(rendered.html_path), ",".join(to_emails))
             set_kv(self.db, "last_processed_trade_date", trade_date)
 
-            log.info(f"[AQF] Report sent. html={rendered.html_path}")
+            if email_sent:
+                log.info(f"[AQF] Report sent. html={rendered.html_path}")
+            else:
+                log.warning(f"[AQF] Report generated but email not sent. html={rendered.html_path}")
             return CycleResult(
                 trade_date=trade_date,
                 next_trade_date=next_trade_date,
